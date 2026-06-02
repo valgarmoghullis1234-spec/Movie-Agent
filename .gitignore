@@ -17,5 +17,8 @@ frontend/out/
 # Local npm cache (workaround for broken global cache)
 .npm-cache/
 
+# Local editor / agent settings (machine-specific)
+.claude/settings.local.json
+
 # OS
 .DS_Store
