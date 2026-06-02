@@ -1,0 +1,21 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Env / secrets
+.env
+.env.local
+backend/.env
+frontend/.env.local
+
+# Node / Next
+node_modules/
+frontend/.next/
+frontend/out/
+
+# Local npm cache (workaround for broken global cache)
+.npm-cache/
+
+# OS
+.DS_Store

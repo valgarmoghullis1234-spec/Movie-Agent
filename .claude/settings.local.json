@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(git init *)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(break)",
+      "Bash(curl -s -N -X POST http://localhost:8000/chat -H 'Content-Type: application/json' -d '{\"message\":\"hi there\"}')",
+      "Bash(npx --yes create-next-app@latest . --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --use-npm)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('next', d['dependencies'].get\\('next'\\)\\); print\\('react', d['dependencies'].get\\('react'\\)\\)\")",
+      "Bash(npm_config_cache=\"/Users/atuljain/Desktop/Movie Agent/.npm-cache\" npm run build)",
+      "Bash(npm_config_cache=\"/Users/atuljain/Desktop/Movie Agent/.npm-cache\" npm run dev)",
+      "Bash(rm -f \"/Users/atuljain/Desktop/Movie Agent/frontend/.claude/launch.json\")",
+      "Bash(rmdir \"/Users/atuljain/Desktop/Movie Agent/frontend/.claude\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} \\(%{time_total}s\\)\\\\n\" --max-time 15 \"https://api.themoviedb.org/3/movie/27205\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} \\(%{time_total}s\\)\\\\n\" --max-time 15 \"https://www.themoviedb.org\")",
+      "Bash(git check-ignore *)",
+      "Bash(gh auth *)",
+      "Bash(git add *)",
+      "Bash(grep -E '\\(\\\\.env$|\\\\.env\\\\.local|node_modules/|\\\\.venv/|\\\\.next/|\\\\.npm-cache/\\)')"
+    ]
+  }
+}
