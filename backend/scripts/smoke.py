@@ -22,6 +22,12 @@ CASES = [
     ("Plot", "What's the plot of Inception?"),
     ("Reviews", "What did people think of Dune: Part Two?"),
     ("Recommend", "Recommend me a sci-fi thriller from the 2010s, in English."),
+    ("Compare", "Compare Oppenheimer and Barbie — which should I watch first?"),
+    ("Similar", "If you liked Inception, what else should I watch?"),
+    ("Parental", "Is Deadpool ok for a 10 year old?"),
+    ("Trivia", "Quiz me with some Inception movie trivia"),
+    ("Tonight", "What should I watch tonight? I want something funny."),
+    ("Streaming", "Where can I watch Dune: Part Two?"),
 ]
 
 

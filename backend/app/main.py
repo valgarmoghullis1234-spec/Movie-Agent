@@ -106,6 +106,9 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                         yield _sse("token", {"text": text})
                     elif kind == "status":
                         yield _sse("status", {"text": text})
+                    elif kind == "choices":
+                        # `text` is a JSON string like {"options": [...]}.
+                        yield _sse("choices", json.loads(text))
             except Exception as exc:
                 yield _sse("error", {"message": str(exc)})
                 return

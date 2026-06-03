@@ -59,6 +59,120 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "required": ["title"],
         },
     },
+    "get_streaming_availability": {
+        "name": "get_streaming_availability",
+        "description": (
+            "Find where a movie can be watched: which subscription services stream it, and "
+            "where to rent or buy it, in a given country. Use this for 'where can I watch X', "
+            "'is X on Netflix', 'where is X streaming' questions. Default country is US; pass a "
+            "2-letter ISO country code (e.g. 'GB', 'IN', 'CA') if the user names a country."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "year": {"type": "integer"},
+                "country": {
+                    "type": "string",
+                    "description": "ISO-3166-1 alpha-2 country code, e.g. 'US', 'GB', 'IN'.",
+                },
+            },
+            "required": ["title"],
+        },
+    },
+    "get_movie_facts": {
+        "name": "get_movie_facts",
+        "description": (
+            "Get a rich factual record about a movie for trivia/quiz purposes: cast, "
+            "director, writer, release date, runtime, awards, box office and ratings. Use "
+            "this to ground trivia questions or to verify a user's answer. Pass a year when "
+            "known to pin the right film."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "year": {"type": "integer"},
+            },
+            "required": ["title"],
+        },
+    },
+    "get_content_guidance": {
+        "name": "get_content_guidance",
+        "description": (
+            "Get parental/family-safety info for a movie: its MPAA certification (G, PG, "
+            "PG-13, R, NC-17), genres, runtime and plot. Use this when the user asks whether "
+            "a movie is appropriate for kids/children/family, or about its age rating. Pass a "
+            "year when known."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "year": {"type": "integer"},
+            },
+            "required": ["title"],
+        },
+    },
+    "find_similar_movies": {
+        "name": "find_similar_movies",
+        "description": (
+            "Given ONE movie the user already likes, return movies that fans of it tend to "
+            "enjoy (taste-based recommendations). Use this for 'if you liked X…' or 'more "
+            "movies like X' requests. Pass a year when known to pin the right film."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "The movie the user already likes."},
+                "year": {"type": "integer", "description": "Optional release year of that movie."},
+            },
+            "required": ["title"],
+        },
+    },
+    "present_choices": {
+        "name": "present_choices",
+        "description": (
+            "Render tappable choice BUTTONS for the user instead of asking them to type a "
+            "choice. Use this whenever you ask the user to pick from a small, discrete set of "
+            "options: disambiguating which movie they meant, multiple-choice trivia answers "
+            "(A–D), or offering moods/vibes to pick from. Write your question or intro as "
+            "normal text FIRST, then call this tool as your LAST action with the options. Do "
+            "NOT also spell out the options as a numbered/lettered list in your text — the "
+            "buttons replace them. After calling this, STOP and wait for the user's tap."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "description": "2–6 choices to show as buttons.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {
+                                "type": "string",
+                                "description": (
+                                    "Short button text shown to the user, e.g. "
+                                    "\"Charlie's Angels (2000)\" or \"Andy Dufresne\"."
+                                ),
+                            },
+                            "value": {
+                                "type": "string",
+                                "description": (
+                                    "The message sent back as the user's reply when this "
+                                    "button is tapped — usually the same as the label, or a "
+                                    "fuller phrase like 'The 2000 version with Drew Barrymore'."
+                                ),
+                            },
+                        },
+                        "required": ["label", "value"],
+                    },
+                },
+            },
+            "required": ["options"],
+        },
+    },
     "discover_movies": {
         "name": "discover_movies",
         "description": (
@@ -95,7 +209,14 @@ _DISPATCH: dict[str, Callable[..., Awaitable[Any]]] = {
     "search_movies": movies.search_titles,
     "get_movie_details": movies.get_details,
     "get_movie_reviews": movies.get_reviews,
+    "find_similar_movies": movies.similar,
+    "get_content_guidance": movies.content_guidance,
+    "get_movie_facts": movies.movie_facts,
+    "get_streaming_availability": movies.where_to_stream,
     "discover_movies": movies.discover,
+    # NOTE: "present_choices" is intentionally absent — it is a UI action, not a data
+    # tool. The runner intercepts it before dispatch (see agents/runner.py) and emits a
+    # "choices" event to the client instead of executing anything.
 }
 
 

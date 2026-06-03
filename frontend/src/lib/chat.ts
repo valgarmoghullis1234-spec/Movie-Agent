@@ -5,11 +5,14 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type Choice = { label: string; value: string };
+
 export type ChatEvent =
   | { type: "meta"; session_id: string }
   | { type: "agent"; name: string }
   | { type: "status"; text: string }
   | { type: "token"; text: string }
+  | { type: "choices"; options: Choice[] }
   | { type: "error"; message: string }
   | { type: "done" };
 

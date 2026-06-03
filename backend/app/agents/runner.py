@@ -26,12 +26,25 @@ _TOOL_LABELS = {
     "get_movie_details": "📄 Fetching details",
     "get_movie_reviews": "⭐ Reading ratings & reviews",
     "discover_movies": "🎯 Finding recommendations",
+    "find_similar_movies": "🎬 Finding similar movies",
+    "get_content_guidance": "👨‍👩‍👧 Checking content rating",
+    "get_movie_facts": "🧠 Digging up movie facts",
+    "get_streaming_availability": "📺 Checking where to stream",
 }
 
 SMALLTALK_PROMPT = (
     "You are MovieBot, a warm, concise movie companion. The user is making small talk or "
     "greeting you. Reply briefly and invite them to ask for a movie's plot, its reviews, or "
     "a recommendation. Do not use tools."
+)
+
+# Appended to every specialist agent's system prompt. The client renders Markdown, so
+# keep formatting purposeful and restrained.
+STYLE_GUIDE = (
+    "\n\nFORMATTING: Your reply is rendered as Markdown. Use **bold** for titles/labels, "
+    "Markdown tables for side-by-side comparisons, and '- ' bullet or numbered lists where "
+    "they help. Do NOT open with a filler line like 'Let me look that up!' — answer "
+    "directly. Use emoji sparingly: at most one or two in a reply, never one per line."
 )
 
 
@@ -50,10 +63,15 @@ async def run_agent(
         system = SMALLTALK_PROMPT
         tools: list[dict[str, Any]] = []
     else:
-        system = get_prompt(agent.prompt_key)
+        system = get_prompt(agent.prompt_key) + STYLE_GUIDE
         tools = schemas_for(agent.tools)
 
     working: list[dict[str, Any]] = list(history)
+
+    # When an iteration produces text and then calls a tool, the next iteration's text
+    # would butt right up against it ("…right away!Here are…"). This flag inserts a blank
+    # line between the two text segments the first time the next one streams.
+    pending_separator = False
 
     for _ in range(MAX_ITERATIONS):
         generation = None
@@ -77,6 +95,9 @@ async def run_agent(
 
         async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
+                if pending_separator:
+                    yield ("token", "\n\n")
+                    pending_separator = False
                 collected.append(text)
                 yield ("token", text)
             final = await stream.get_final_message()
@@ -92,11 +113,45 @@ async def run_agent(
         if final.stop_reason != "tool_use":
             return
 
-        # Execute each requested tool and feed results back.
-        results: list[dict[str, Any]] = []
+        # If this iteration emitted text, separate it from any later text segment.
+        if collected:
+            pending_separator = True
+
+        # Split tool calls: present_choices is a UI action handled here (not dispatched);
+        # everything else is a real data tool that gets executed and fed back.
+        choice_block = None
+        data_blocks: list[Any] = []
         for block in final.content:
             if getattr(block, "type", None) != "tool_use":
                 continue
+            if block.name == "present_choices":
+                choice_block = block
+            else:
+                data_blocks.append(block)
+
+        if choice_block is not None:
+            options = []
+            if isinstance(choice_block.input, dict):
+                options = choice_block.input.get("options", []) or []
+            yield ("choices", json.dumps({"options": options}))
+
+        # No real tools to run -> the question text streamed and buttons are shown;
+        # end the turn and wait for the user to tap a choice.
+        if not data_blocks:
+            return
+
+        # Otherwise run the real tools and feed results back (satisfying present_choices
+        # too, since the API requires a result for every tool_use in the turn).
+        results: list[dict[str, Any]] = []
+        if choice_block is not None:
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": choice_block.id,
+                    "content": json.dumps({"ok": True}),
+                }
+            )
+        for block in data_blocks:
             label = _TOOL_LABELS.get(block.name, f"Using {block.name}")
             yield ("status", f"{label}…")
             span = trace.span(name=f"tool:{block.name}", input=block.input) if trace else None
