@@ -13,7 +13,7 @@ from ..config import get_settings
 from ..prompts import get_prompt
 from .definitions import AGENTS, DEFAULT_INTENT, AgentDef
 
-VALID = {"plot", "reviews", "recommend", "smalltalk"}
+VALID = {"plot", "reviews", "recommend", "compare", "similar", "parental", "trivia", "tonight", "streaming", "smalltalk"}
 
 
 async def route(history: list[dict[str, Any]], trace: Optional[Any] = None) -> AgentDef:

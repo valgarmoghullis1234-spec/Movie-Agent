@@ -15,13 +15,15 @@ from typing import Any, Optional
 import httpx
 
 from ..config import get_settings
+from . import _resolver
 
 # Network tuning: TMDB can be slow/flaky over hotspots & VPNs, so use a generous
 # timeout and retry transient failures before giving up.
 _TIMEOUT = httpx.Timeout(25.0, connect=10.0)
 _MAX_ATTEMPTS = 3
 
-BASE_URL = "https://api.themoviedb.org/3"
+API_HOST = "api.themoviedb.org"
+BASE_URL = f"https://{API_HOST}/3"
 POSTER_BASE = "https://image.tmdb.org/t/p/w342"
 
 # Standard TMDB movie genre map (avoids an extra /genre/movie/list call per request).
@@ -59,23 +61,47 @@ def _api_key() -> str:
     return key
 
 
+async def _request(client: httpx.AsyncClient, path: str, params: dict[str, Any], ip: Optional[str]) -> dict[str, Any]:
+    """One GET, either to the normal hostname (ip=None) or to a pinned IP with SNI/Host set
+    to the real hostname (so TLS/cert verification still validate against api.themoviedb.org)."""
+    if ip:
+        url = f"https://{ip}/3{path}"
+        kwargs: dict[str, Any] = {"headers": {"Host": API_HOST}, "extensions": {"sni_hostname": API_HOST}}
+    else:
+        url = f"{BASE_URL}{path}"
+        kwargs = {}
+    resp = await client.get(url, params=params, **kwargs)
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def _get(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     params = dict(params or {})
     params["api_key"] = _api_key()
+
+    # Build connection candidates: real IPs first (bypasses ISPs that DNS-poison the host),
+    # then the plain hostname as a last resort. DoH returns several IPs; some ISPs blackhole
+    # a subset, so we fail over across them — the first that answers 2xx wins.
+    real_ips = await _resolver.resolve(API_HOST)
+    candidates: list[Optional[str]] = [*real_ips, None]
+
     last_exc: Optional[Exception] = None
-    for attempt in range(_MAX_ATTEMPTS):
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(f"{BASE_URL}{path}", params=params)
-                resp.raise_for_status()
-                return resp.json()
-        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-            # Don't retry genuine client errors (e.g. 401 bad key, 404 not found).
-            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500:
-                raise
-            last_exc = exc
-            if attempt < _MAX_ATTEMPTS - 1:
-                await asyncio.sleep(0.5 * (attempt + 1))  # linear backoff
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        for ip in candidates:
+            for attempt in range(_MAX_ATTEMPTS):
+                try:
+                    return await _request(client, path, params, ip)
+                except httpx.HTTPStatusError as exc:
+                    # Don't retry/fail-over on genuine client errors (401 bad key, 404).
+                    if exc.response.status_code < 500:
+                        raise
+                    last_exc = exc
+                    break  # server error: try the next candidate
+                except httpx.TransportError as exc:
+                    last_exc = exc
+                    if attempt < _MAX_ATTEMPTS - 1:
+                        await asyncio.sleep(0.3 * (attempt + 1))  # brief backoff, then retry
+            # exhausted retries for this candidate → fall through to the next IP
     raise last_exc  # type: ignore[misc]
 
 
@@ -140,6 +166,31 @@ async def movie_reviews(movie_id: int) -> dict[str, Any]:
         "vote_count": details.get("vote_count"),
         "reviews": reviews,
     }
+
+
+async def watch_providers(movie_id: int, country: str = "US") -> dict[str, Any]:
+    """Where a movie can be streamed/rented/bought in a country (TMDB's JustWatch data).
+    Returns provider names grouped by access type for the given ISO-3166-1 country code."""
+    data = await _get(f"/movie/{movie_id}/watch/providers")
+    region = (data.get("results") or {}).get(country.upper(), {})
+
+    def names(key: str) -> list[str]:
+        return [p.get("provider_name") for p in region.get(key, []) if p.get("provider_name")]
+
+    return {
+        "country": country.upper(),
+        "stream": names("flatrate"),  # subscription streaming
+        "rent": names("rent"),
+        "buy": names("buy"),
+        "link": region.get("link"),  # JustWatch deep link
+    }
+
+
+async def similar_movies(movie_id: int) -> list[dict[str, Any]]:
+    """Movies TMDB recommends for fans of this one. Uses the curated /recommendations
+    endpoint (taste-based) rather than /similar (keyword-based). Returns up to 8 slim results."""
+    data = await _get(f"/movie/{movie_id}/recommendations")
+    return [_slim_movie(m) for m in data.get("results", [])[:8]]
 
 
 async def discover_movies(

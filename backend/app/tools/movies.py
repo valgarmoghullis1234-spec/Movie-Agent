@@ -102,6 +102,76 @@ async def get_reviews(title: str, year: Optional[int] = None) -> dict[str, Any]:
     return out
 
 
+async def similar(title: str, year: Optional[int] = None) -> dict[str, Any]:
+    """Find movies fans of `title` tend to like. TMDB only (OMDb has no similarity endpoint)."""
+    try:
+        results = await tmdb.search_movies(title, year)
+        if not results:
+            return {"error": f"Couldn't find a movie called '{title}' to base suggestions on."}
+        seed = results[0]
+        recs = await tmdb.similar_movies(seed["id"])
+        return {"source": "tmdb", "seed": {"title": seed["title"], "year": seed["year"]}, "results": recs}
+    except tmdb.TMDBNotConfigured as exc:
+        return {"error": str(exc), "hint": "Similarity suggestions require TMDB_API_KEY."}
+    except Exception as exc:
+        return {"error": f"TMDB unavailable: {type(exc).__name__}: {exc}", "hint": "Try again shortly."}
+
+
+async def content_guidance(title: str, year: Optional[int] = None) -> dict[str, Any]:
+    """Parental/content info for a movie: MPAA certification, genres, plot. OMDb only
+    (TMDB has no content certification). Returns the fields a family-safety check needs."""
+    try:
+        o = await omdb.by_title(title, year)
+        return {
+            "source": "omdb",
+            "title": o.get("title"),
+            "year": o.get("year"),
+            "rated": o.get("rated"),
+            "genres": o.get("genres"),
+            "runtime": o.get("runtime"),
+            "plot": o.get("plot"),
+        }
+    except omdb.OMDbNotFound:
+        return {"error": f"Couldn't find a movie called '{title}'."}
+    except omdb.OMDbNotConfigured as exc:
+        return {"error": str(exc), "hint": "Parental guidance requires OMDB_API_KEY."}
+    except Exception as exc:
+        return {"error": f"OMDb unavailable: {type(exc).__name__}: {exc}", "hint": "Try again shortly."}
+
+
+async def movie_facts(title: str, year: Optional[int] = None) -> dict[str, Any]:
+    """Rich factual record (cast, crew, awards, box office, ratings) for trivia/quizzes.
+    OMDb-backed — the richest single-call source of verifiable facts."""
+    try:
+        return await omdb.facts_by_title(title, year)
+    except omdb.OMDbNotFound:
+        return {"error": f"Couldn't find a movie called '{title}'."}
+    except omdb.OMDbNotConfigured as exc:
+        return {"error": str(exc), "hint": "Trivia requires OMDB_API_KEY."}
+    except Exception as exc:
+        return {"error": f"OMDb unavailable: {type(exc).__name__}: {exc}", "hint": "Try again shortly."}
+
+
+async def where_to_stream(title: str, year: Optional[int] = None, country: str = "US") -> dict[str, Any]:
+    """Where a movie is available to stream/rent/buy in a country. TMDB/JustWatch only."""
+    try:
+        results = await tmdb.search_movies(title, year)
+        if not results:
+            return {"error": f"Couldn't find a movie called '{title}'."}
+        seed = results[0]
+        providers = await tmdb.watch_providers(seed["id"], country)
+        return {
+            "source": "tmdb/justwatch",
+            "title": seed["title"],
+            "year": seed["year"],
+            **providers,
+        }
+    except tmdb.TMDBNotConfigured as exc:
+        return {"error": str(exc), "hint": "Streaming availability requires TMDB_API_KEY."}
+    except Exception as exc:
+        return {"error": f"TMDB unavailable: {type(exc).__name__}: {exc}", "hint": "Try again shortly."}
+
+
 async def discover(
     genres: Optional[list[str]] = None,
     year_from: Optional[int] = None,

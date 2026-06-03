@@ -72,14 +72,44 @@ async def by_title(title: str, year: Optional[int] = None) -> dict[str, Any]:
         "title": m.get("Title"),
         "year": _year(m.get("Year")),
         "plot": m.get("Plot"),
+        "rated": m.get("Rated"),  # MPAA certification: G / PG / PG-13 / R / NC-17 / N/A
         "genres": [g.strip() for g in (m.get("Genre") or "").split(",") if g.strip()],
         "runtime": m.get("Runtime"),
+        "actors": m.get("Actors"),
+        "director": m.get("Director"),
         "imdb_id": m.get("imdbID"),
         "imdb_rating": m.get("imdbRating"),
         "ratings": [
             {"source": r.get("Source"), "value": r.get("Value")}
             for r in m.get("Ratings", [])
         ],
+    }
+
+
+async def facts_by_title(title: str, year: Optional[int] = None) -> dict[str, Any]:
+    """Rich factual record for trivia: cast, crew, awards, box office, release, ratings."""
+    params: dict[str, Any] = {"t": title, "type": "movie", "plot": "short"}
+    if year:
+        params["y"] = year
+    m = await _get(params)
+    return {
+        "source": "omdb",
+        "title": m.get("Title"),
+        "year": _year(m.get("Year")),
+        "rated": m.get("Rated"),
+        "released": m.get("Released"),
+        "runtime": m.get("Runtime"),
+        "genres": [g.strip() for g in (m.get("Genre") or "").split(",") if g.strip()],
+        "director": m.get("Director"),
+        "writer": m.get("Writer"),
+        "actors": m.get("Actors"),
+        "plot": m.get("Plot"),
+        "language": m.get("Language"),
+        "country": m.get("Country"),
+        "awards": m.get("Awards"),
+        "box_office": m.get("BoxOffice"),
+        "imdb_rating": m.get("imdbRating"),
+        "metascore": m.get("Metascore"),
     }
 
 

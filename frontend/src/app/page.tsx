@@ -1,22 +1,61 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { streamChat, type ChatMessage } from "@/lib/chat";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { streamChat, type ChatMessage, type Choice } from "@/lib/chat";
 
-type Msg = ChatMessage & { agent?: string };
+type Msg = ChatMessage & { agent?: string; choices?: Choice[] };
 
 const SUGGESTIONS = [
   "What's the plot of Inception?",
   "Reviews for Dune: Part Two",
   "Recommend me a movie",
+  "Compare Oppenheimer and Barbie",
+  "Is Deadpool ok for a 10 year old?",
+  "Quiz me with movie trivia",
+  "What should I watch tonight? Something funny",
+  "Where can I watch Dune?",
 ];
 
 const AGENT_LABEL: Record<string, string> = {
   plot: "📖 Plot",
   reviews: "⭐ Reviews",
   recommend: "🎯 Recommender",
+  compare: "⚖️ Compare",
+  similar: "🎬 More Like This",
+  parental: "👨‍👩‍👧 Parental Guide",
+  trivia: "🧠 Trivia",
+  tonight: "🌙 Tonight",
+  streaming: "📺 Where to Watch",
   smalltalk: "💬 Chat",
 };
+
+// Renders assistant replies as Markdown (GFM tables/lists/bold) with Tailwind styling.
+// Descendant selectors keep us off the typography plugin, which isn't installed.
+function Markdown({ content }: { content: string }) {
+  return (
+    <div
+      className={[
+        "text-[var(--foreground)]",
+        "[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+        "[&_strong]:font-semibold",
+        "[&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:font-heading [&_h2]:text-lg [&_h2]:font-semibold",
+        "[&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:font-heading [&_h3]:text-base [&_h3]:font-semibold",
+        "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
+        "[&_li]:my-0.5",
+        "[&_a]:text-[var(--accent)] [&_a]:underline",
+        "[&_hr]:my-3 [&_hr]:border-[var(--border)]",
+        "[&_table]:my-2 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse",
+        "[&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold",
+        "[&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:align-top",
+        "[&_code]:rounded [&_code]:bg-[var(--border)]/40 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]",
+      ].join(" ")}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    </div>
+  );
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -37,7 +76,11 @@ export default function Home() {
     setBusy(true);
     setStatus("");
 
-    const history: Msg[] = [...messages, { role: "user", content: trimmed }];
+    // Drop any choice buttons from prior turns — they're answered once a new message is sent.
+    const history: Msg[] = [
+      ...messages.map((m): Msg => ({ ...m, choices: undefined })),
+      { role: "user", content: trimmed },
+    ];
     setMessages([...history, { role: "assistant", content: "" }]);
 
     const outgoing: ChatMessage[] = history.map((m) => ({
@@ -57,6 +100,7 @@ export default function Home() {
         if (ev.type === "meta") setSessionId(ev.session_id);
         else if (ev.type === "agent") setLast({ agent: ev.name });
         else if (ev.type === "status") setStatus(ev.text);
+        else if (ev.type === "choices") setLast({ choices: ev.options });
         else if (ev.type === "token") {
           setStatus("");
           setMessages((m) => {
@@ -136,22 +180,39 @@ export default function Home() {
                   className={
                     m.role === "user"
                       ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md px-4 py-2.5 leading-relaxed text-[var(--background)]"
-                      : "max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 leading-relaxed"
+                      : "max-w-[88%] rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 leading-relaxed"
                   }
                   style={
                     m.role === "user" ? { backgroundColor: "var(--accent)" } : undefined
                   }
                 >
-                  {m.content ||
-                    (isLast && busy ? (
-                      <span className="inline-flex items-center gap-2 text-[var(--muted)]">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-                        {status || "Thinking…"}
-                      </span>
-                    ) : (
-                      ""
-                    ))}
+                  {m.role === "user" ? (
+                    m.content
+                  ) : m.content ? (
+                    <Markdown content={m.content} />
+                  ) : isLast && busy ? (
+                    <span className="inline-flex items-center gap-2 text-[var(--muted)]">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+                      {status || "Thinking…"}
+                    </span>
+                  ) : (
+                    ""
+                  )}
                 </div>
+                {m.role === "assistant" && m.choices && m.choices.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {m.choices.map((c) => (
+                      <button
+                        key={c.value}
+                        disabled={busy}
+                        onClick={() => send(c.value)}
+                        className="rounded-full border border-[var(--accent)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-[var(--background)] disabled:opacity-50"
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })
