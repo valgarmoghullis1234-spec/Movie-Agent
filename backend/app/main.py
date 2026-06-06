@@ -48,6 +48,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[Message]
     session_id: Optional[str] = None
+    country_code: Optional[str] = None
 
 
 @app.get("/health")
@@ -100,7 +101,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                 with contextlib.suppress(Exception):
                     trace.update(metadata={"agent": agent.name})
 
-                async for kind, text in run_agent(agent, history, trace=trace):
+                async for kind, text in run_agent(agent, history, trace=trace, country_code=req.country_code):
                     if kind == "token":
                         full.append(text)
                         yield _sse("token", {"text": text})
