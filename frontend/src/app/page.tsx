@@ -57,18 +57,38 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
-function detectCountry(): Promise<string | null> {
-  return fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(3000) })
-    .then((r) => r.text())
-    .then((t) => (t.trim().length === 2 ? t.trim().toUpperCase() : null))
-    .catch(() => {
-      try {
-        const region = new Intl.Locale(navigator.language).region;
-        return region && region.length === 2 ? region.toUpperCase() : null;
-      } catch {
-        return null;
-      }
-    });
+function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    fetch(url)
+      .then((r) => { clearTimeout(timer); resolve(r); })
+      .catch((e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+async function detectCountry(): Promise<string | null> {
+  // Try Cloudflare's free trace endpoint first — no rate limits, always available.
+  try {
+    const r = await fetchWithTimeout("https://cloudflare.com/cdn-cgi/trace", 3000);
+    const text = await r.text();
+    const match = text.match(/^loc=([A-Z]{2})$/m);
+    if (match) return match[1];
+  } catch { /* fall through */ }
+
+  // Fallback: ipapi.co
+  try {
+    const r = await fetchWithTimeout("https://ipapi.co/country/", 3000);
+    const t = (await r.text()).trim();
+    if (t.length === 2) return t.toUpperCase();
+  } catch { /* fall through */ }
+
+  // Last resort: browser locale region (may reflect language preference, not location)
+  try {
+    const region = new Intl.Locale(navigator.language).region;
+    if (region && region.length === 2) return region.toUpperCase();
+  } catch { /* ignore */ }
+
+  return null;
 }
 
 export default function Home() {
