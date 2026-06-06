@@ -52,6 +52,7 @@ async def run_agent(
     agent: AgentDef,
     history: list[dict[str, Any]],
     trace: Optional[Any] = None,
+    country_code: Optional[str] = None,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield (event_type, text) pairs: 'token' for reply text, 'status' for tool activity."""
     from anthropic import AsyncAnthropic
@@ -64,6 +65,12 @@ async def run_agent(
         tools: list[dict[str, Any]] = []
     else:
         system = get_prompt(agent.prompt_key) + STYLE_GUIDE
+        if country_code and len(country_code) == 2:
+            system += (
+                f"\n\nUSER LOCATION: The user's country is {country_code.upper()}. "
+                "Use this as the default country for get_streaming_availability "
+                "unless the user explicitly names a different country."
+            )
         tools = schemas_for(agent.tools)
 
     working: list[dict[str, Any]] = list(history)

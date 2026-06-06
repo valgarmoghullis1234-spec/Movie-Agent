@@ -57,13 +57,32 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
+function detectCountry(): Promise<string | null> {
+  return fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(3000) })
+    .then((r) => r.text())
+    .then((t) => (t.trim().length === 2 ? t.trim().toUpperCase() : null))
+    .catch(() => {
+      try {
+        const region = new Intl.Locale(navigator.language).region;
+        return region && region.length === 2 ? region.toUpperCase() : null;
+      } catch {
+        return null;
+      }
+    });
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [countryCode, setCountryCode] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    detectCountry().then((code) => { if (code) setCountryCode(code); });
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -96,7 +115,7 @@ export default function Home() {
       });
 
     try {
-      for await (const ev of streamChat(outgoing, sessionId)) {
+      for await (const ev of streamChat(outgoing, sessionId, countryCode)) {
         if (ev.type === "meta") setSessionId(ev.session_id);
         else if (ev.type === "agent") setLast({ agent: ev.name });
         else if (ev.type === "status") setStatus(ev.text);

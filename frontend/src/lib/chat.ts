@@ -19,12 +19,13 @@ export type ChatEvent =
 export async function* streamChat(
   messages: ChatMessage[],
   sessionId: string | null,
+  countryCode?: string | null,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, session_id: sessionId }),
+    body: JSON.stringify({ messages, session_id: sessionId, country_code: countryCode ?? null }),
     signal,
   });
 
