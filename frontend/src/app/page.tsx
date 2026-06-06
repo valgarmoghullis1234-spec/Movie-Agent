@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat, type ChatMessage, type Choice } from "@/lib/chat";
+import { streamChat, API_BASE, type ChatMessage, type Choice } from "@/lib/chat";
 
 type Msg = ChatMessage & { agent?: string; choices?: Choice[] };
 
@@ -57,37 +57,15 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
-function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
-    fetch(url)
-      .then((r) => { clearTimeout(timer); resolve(r); })
-      .catch((e) => { clearTimeout(timer); reject(e); });
-  });
-}
-
 async function detectCountry(): Promise<string | null> {
-  // Try Cloudflare's free trace endpoint first — no rate limits, always available.
+  // Ask our own backend — it resolves country server-side from the client IP,
+  // avoiding any browser CORS restrictions on third-party geolocation APIs.
   try {
-    const r = await fetchWithTimeout("https://cloudflare.com/cdn-cgi/trace", 3000);
-    const text = await r.text();
-    const match = text.match(/^loc=([A-Z]{2})$/m);
-    if (match) return match[1];
-  } catch { /* fall through */ }
-
-  // Fallback: ipapi.co
-  try {
-    const r = await fetchWithTimeout("https://ipapi.co/country/", 3000);
-    const t = (await r.text()).trim();
-    if (t.length === 2) return t.toUpperCase();
-  } catch { /* fall through */ }
-
-  // Last resort: browser locale region (may reflect language preference, not location)
-  try {
-    const region = new Intl.Locale(navigator.language).region;
-    if (region && region.length === 2) return region.toUpperCase();
+    const r = await fetch(`${API_BASE}/location`);
+    const data = await r.json();
+    if (typeof data.country_code === "string" && data.country_code.length === 2)
+      return data.country_code;
   } catch { /* ignore */ }
-
   return null;
 }
 

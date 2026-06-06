@@ -18,7 +18,8 @@ import json
 import uuid
 from typing import Any, AsyncIterator, List, Optional
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -49,6 +50,26 @@ class ChatRequest(BaseModel):
     messages: List[Message]
     session_id: Optional[str] = None
     country_code: Optional[str] = None
+
+
+@app.get("/location")
+async def location(request: Request) -> dict:
+    """Resolve the caller's country code from their IP via ipapi.co (server-side, no CORS)."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (
+        request.client.host if request.client else None
+    )
+    if not client_ip or client_ip in ("127.0.0.1", "::1", ""):
+        return {"country_code": None}
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"https://ipapi.co/{client_ip}/country/")
+            code = r.text.strip()
+            if len(code) == 2 and code.isalpha():
+                return {"country_code": code.upper()}
+    except Exception:
+        pass
+    return {"country_code": None}
 
 
 @app.get("/health")
