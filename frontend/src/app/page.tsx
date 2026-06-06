@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { streamChat, type ChatMessage, type Choice } from "@/lib/chat";
+import { streamChat, API_BASE, type ChatMessage, type Choice } from "@/lib/chat";
 
 type Msg = ChatMessage & { agent?: string; choices?: Choice[] };
 
@@ -57,18 +57,16 @@ function Markdown({ content }: { content: string }) {
   );
 }
 
-function detectCountry(): Promise<string | null> {
-  return fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(3000) })
-    .then((r) => r.text())
-    .then((t) => (t.trim().length === 2 ? t.trim().toUpperCase() : null))
-    .catch(() => {
-      try {
-        const region = new Intl.Locale(navigator.language).region;
-        return region && region.length === 2 ? region.toUpperCase() : null;
-      } catch {
-        return null;
-      }
-    });
+async function detectCountry(): Promise<string | null> {
+  // Ask our own backend — it resolves country server-side from the client IP,
+  // avoiding any browser CORS restrictions on third-party geolocation APIs.
+  try {
+    const r = await fetch(`${API_BASE}/location`);
+    const data = await r.json();
+    if (typeof data.country_code === "string" && data.country_code.length === 2)
+      return data.country_code;
+  } catch { /* ignore */ }
+  return null;
 }
 
 export default function Home() {
